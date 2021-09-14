@@ -142,7 +142,7 @@ int main() try
 	float time = 0.f;
 	float x = 0, y = 0;
 	float dx = 0.3, dy = 0.4;
-	
+
 	glUseProgram(program);
 	GLint adrTrans = glGetUniformLocation(program, "transform");
 	GLint adrView = glGetUniformLocation(program, "view");
@@ -166,13 +166,14 @@ int main() try
 
 		if (!running)
 			break;
+		SDL_GL_SetSwapInterval(0);
 
 		auto now = std::chrono::high_resolution_clock::now();
-		float dt = std::chrono::duration_cast<std::chrono::duration<float>>(now - last_frame_start).count();
+		float dt = 0.016f;
 		last_frame_start = now;
 
 		glClear(GL_COLOR_BUFFER_BIT);
-		
+
 		float aspect_ratio = width * 1.0 / height;
 		float view[16] =
 		{
@@ -189,10 +190,10 @@ int main() try
 		if (y + dy * dt > 1 || y + dy * dt < -1) {
 			dy = ((dy < 0) - (dy > 0)) * ((float)rand() / RAND_MAX / 2 + 0.5);
 		}
-		x += dx * dt;
+		x += dx * dt; //Если закомментить получится интереснее
 		y += dy * dt;
 		time += dt;
-		
+
 		float transform[16] = {
 			cos(time) * 0.5, -sin(time) * 0.5, 0, x,
 			sin(time) * 0.5, cos(time) * 0.5, 0, y,
@@ -204,10 +205,11 @@ int main() try
 		glUniformMatrix4fv(adrTrans, 1, GL_TRUE, transform);
 		glUniformMatrix4fv(adrView, 1, GL_TRUE, view);
 		glBindVertexArray(vao);
-		
+
 		glDrawArrays(GL_TRIANGLES, 0, 3);
 
 		SDL_GL_SwapWindow(window);
+		std::cout << dt;
 	}
 
 	SDL_GL_DeleteContext(gl_context);
