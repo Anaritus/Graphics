@@ -204,7 +204,25 @@ int main() try
 
 	auto last_frame_start = std::chrono::high_resolution_clock::now();
 
+	GLuint vbo, vao, ebo;
+	glGenBuffers(1, &vbo);
+	glGenBuffers(1, &ebo);
+	glGenVertexArrays(1, &vao);
+	glBindVertexArray(vao);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void*)(0));
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(vertex), (void*)(sizeof(vec3)));
+
 	float time = 0.f;
+	float speed = 1.f;
+	float cube_x = 0.f, cube_y = 0.f;
+
+	glEnable(GL_DEPTH_TEST);
+	//glEnable(GL_CULL_FACE);
+	glCullFace(GL_FRONT);
 
 	std::map<SDL_Keycode, bool> button_down;
 
@@ -242,26 +260,72 @@ int main() try
 		time += dt;
 
 		glClear(GL_COLOR_BUFFER_BIT);
+		glClear(GL_DEPTH_BUFFER_BIT);
+		
+		if (button_down[SDLK_UP]) cube_y += dt * speed;
+		if (button_down[SDLK_DOWN]) cube_y -= dt * speed;
+		if (button_down[SDLK_LEFT]) cube_x -= dt * speed;
+		if (button_down[SDLK_RIGHT]) cube_x += dt * speed;
+
+		float near = 0.1f, far = 10.f;
+		float right = 1.1f * near, top = 1.1f * near * height / width;
 
 		float view[16] =
 		{
-			1.f, 0.f, 0.f, 0.f,
-			0.f, 1.f, 0.f, 0.f,
-			0.f, 0.f, 1.f, 0.f,
+			near/right, 0.f, 0.f, 0.f,
+			0.f, near/top, 0.f, 0.f,
+			0.f, 0.f, -(far+near)/(far-near), -(2 * far * near) / (far - near),
+			0.f, 0.f, -1.f, 0,
+		};
+		float angle = time;
+		float scale = 0.5f;	
+		float transform[16] =
+		{
+			cos(angle) * scale, 0.f, -sin(angle) * scale, cube_x,
+			0.f, scale, 0.f, cube_y + 1.f,
+			sin(angle) * scale, 0.f, cos(angle) * scale, -5.f,
 			0.f, 0.f, 0.f, 1.f,
 		};
 
-		float transform[16] =
+		float transform1[16] =
 		{
-			1.f, 0.f, 0.f, 0.f,
-			0.f, 1.f, 0.f, 0.f,
-			0.f, 0.f, 1.f, 0.f,
+			cos(angle) * scale, -sin(angle) * scale, 0.f, cube_x - 1.f,
+			sin(angle)* scale, cos(angle)* scale, 0.f, cube_y -1.f,
+			0.f, 0.f, scale, -5.f,
 			0.f, 0.f, 0.f, 1.f,
 		};
+
+		float transform2[16] =
+		{
+			scale, 0.f, 0.f, cube_x + 1.f,
+			0.f, cos(angle) * scale, -sin(angle) * scale, cube_y -1.f,
+			0.f, sin(angle) * scale, cos(angle) *scale, -5.f,
+			0.f, 0.f, 0.f, 1.f,
+		};
+
 
 		glUseProgram(program);
 		glUniformMatrix4fv(view_location, 1, GL_TRUE, view);
+
 		glUniformMatrix4fv(transform_location, 1, GL_TRUE, transform);
+		glBindVertexArray(vao);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(cube_vertices), &cube_vertices, GL_STATIC_COPY);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cube_indices), &cube_indices, GL_STATIC_COPY);
+		glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
+
+		glUniformMatrix4fv(transform_location, 1, GL_TRUE, transform1);
+		glBindVertexArray(vao);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(cube_vertices), &cube_vertices, GL_STATIC_COPY);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cube_indices), &cube_indices, GL_STATIC_COPY);
+		glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
+
+		glUniformMatrix4fv(transform_location, 1, GL_TRUE, transform2);
+		glBindVertexArray(vao);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(cube_vertices), &cube_vertices, GL_STATIC_COPY);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cube_indices), &cube_indices, GL_STATIC_COPY);
+		glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
+
+
 
 		SDL_GL_SwapWindow(window);
 	}
