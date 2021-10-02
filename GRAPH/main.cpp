@@ -5,6 +5,8 @@
 #include <SDL2/SDL.h>
 #endif
 
+#define PI 3.14159265359f
+
 #include <GL/glew.h>
 
 #include <string_view>
@@ -13,6 +15,7 @@
 #include <chrono>
 #include <vector>
 #include <map>
+#include <cmath>
 
 std::string to_string(std::string_view str)
 {
@@ -128,21 +131,83 @@ struct vertex
 struct funcy
 {
 	std::vector<vec2> roots;
+	float cap = 1.f;
+
+	void normalize()
+	{
+		float my = 0;
+		for (auto t : roots) {
+			float y = apply(t).position.y;
+			if (abs(y) > my) my = abs(y);
+		}
+		cap *= my / 0.8f;
+	}
+
 	void newRoot(vec2 root)
 	{
 		roots.push_back(root);
+		normalize();
 	}
 	vertex apply(vec2 point)
 	{
 		float retZ = 0;
+		int cnt = 1;
+		float d;
 		for (auto root : roots) {
-			retZ += cos(std::hypot(root.x - point.x, root.y - point.y)) / std::hypot(root.x - point.x, root.y - point.y);
+			d = std::hypot(root.x - point.x, root.y - point.y);
+			retZ += cnt * 0.8f * exp(-d * d * 10);
+			cnt = -cnt;
 		}
-		retZ = retZ / roots.size();
-		std::uint8_t col = static_cast<uint8_t>((retZ + 1) * 128);
-		return { {point.x, point.y, retZ}, {col, static_cast <uint8_t>(col / 2), static_cast<uint8_t>(-col), 255} };
+		retZ /= cap;
+		std::uint8_t col = static_cast<uint8_t>((retZ / 0.8f + 1) * 64);
+		return { {point.x, retZ,  point.y}, {static_cast<uint8_t>(col * 2), 0, static_cast<uint8_t>(-col), 255} };
+	}
+	void popRoot()
+	{
+		roots.pop_back();
+		normalize();
 	}
 };
+
+void genindices(GLuint array_buffer, GLuint array, GLuint ebo=0)
+{
+	glBindVertexArray(array);
+	glBindBuffer(GL_ARRAY_BUFFER, array_buffer);
+	if (ebo != 0) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void*)(0));
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(vertex), (void*)(sizeof(vec3)));
+}
+
+std::vector<vertex> calculate(funcy f, int quality)
+{
+	std::vector<vertex> dots;
+	for (int y = 0; y <= quality; y++) {
+		for (int x = 0; x <= quality; x++) {
+			dots.push_back(f.apply({ 2.0f * x / quality - 1, 2.0f * y / quality - 1 }));
+		}
+	}
+	return dots;
+}
+
+std::vector<int> calculate_ind(int quality)
+{
+	std::vector<int> dots_ind;
+	for (int y = 0; y <= quality; y++) {
+		for (int x = 0; x <= quality; x++) {
+			if (x < quality && y < quality) {
+				dots_ind.push_back(x * (quality + 1) + y);
+				dots_ind.push_back(x * (quality + 1) + y + 1);
+				dots_ind.push_back((x + 1) * (quality + 1) + y);
+				dots_ind.push_back((x + 1) * (quality + 1) + y);
+				dots_ind.push_back(x * (quality + 1) + y + 1);
+				dots_ind.push_back((x + 1) * (quality + 1) + y + 1);
+			}
+		}
+	}
+	return dots_ind;
+}
 
 static vertex cube_vertices[]
 {
@@ -152,17 +217,17 @@ static vertex cube_vertices[]
 	{{-1.f,  1.f, -1.f}, {  255, 255, 255, 255}},
 	{{-1.f,  1.f,  1.f}, {  255, 255, 255, 255}},
 	// -Y
-	{{-1.f, -1.f, -1.f}, {255,   255, 255, 255}},
-	{{ 1.f, -1.f, -1.f}, {255,   255, 255, 255}},
-	{{-1.f, -1.f,  1.f}, {255,   255, 255, 255}},
-	{{ 1.f, -1.f,  1.f}, {255,   255, 255, 255}},
+	{{-1.f, -1.f, -1.f}, {  255, 255, 255, 255}},
+	{{ 1.f, -1.f, -1.f}, {  255, 255, 255, 255}},
+	{{-1.f, -1.f,  1.f}, {  255, 255, 255, 255}},
+	{{ 1.f, -1.f,  1.f}, {  255, 255, 255, 255}},
 	// -Z
-	{{ 1.f, -1.f, -1.f}, {255, 255,   255, 255}},
-	{{-1.f, -1.f, -1.f}, {255, 255,   255, 255}},
-	{{ 1.f,  1.f, -1.f}, {255, 255,   255, 255}},
-	{{-1.f,  1.f, -1.f}, {255, 255,   255, 255}}
+	{{ 1.f, -1.f, -1.f}, {  255, 255, 255, 255}},
+	{{-1.f, -1.f, -1.f}, {  255, 255, 255, 255}},
+	{{ 1.f,  1.f, -1.f}, {  255, 255, 255, 255}},
+	{{-1.f,  1.f, -1.f}, {  255, 255, 255, 255}}
 };
-
+ 
 static vertex axises[]
 {
 	{{-0.99f,  1.f, -0.99f}, {0, 0, 0, 0}}, //x
@@ -196,12 +261,6 @@ static std::uint32_t vert_indices[]
 	0, 3,
 	1, 3,
 	2
-};
-
-static std::uint32_t is_indices[]
-{
-	1, 0, 2,
-	2, 1, 3
 };
 
 
@@ -260,22 +319,51 @@ int main() try
 
 	std::vector<vertex> mass;
 
-	GLuint vbo, vao, ebo;
-	glGenBuffers(1, &vbo);
-	glGenBuffers(1, &ebo);
-	glGenVertexArrays(1, &vao);
-	glBindVertexArray(vao);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void*)(0));
-	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(vertex), (void*)(sizeof(vec3)));
+	GLuint vao_cube, vao_axes, vao_square, vao_strip, vao_f;
+	GLuint vbo_cube, vbo_axes, vbo_square, vbo_strip, vbo_f;
+	GLuint ebo_cube, ebo_axes, ebo_f;
+
+	glGenBuffers(1, &vbo_cube);
+	glGenBuffers(1, &vbo_axes);
+	glGenBuffers(1, &vbo_strip);
+	glGenBuffers(1, &vbo_square);
+	glGenBuffers(1, &vbo_f);
+
+	glGenBuffers(1, &ebo_cube);
+	glGenBuffers(1, &ebo_axes);
+	glGenBuffers(1, &ebo_f);
+
+	glGenVertexArrays(1, &vao_cube);
+	glGenVertexArrays(1, &vao_axes);
+	glGenVertexArrays(1, &vao_square);
+	glGenVertexArrays(1, &vao_strip);	
+	glGenVertexArrays(1, &vao_f);
+
+
+	genindices(vbo_cube, vao_cube, ebo_cube);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(cube_vertices), &cube_vertices, GL_STATIC_COPY);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cube_indices), &cube_indices, GL_STATIC_COPY);
+	genindices(vbo_axes, vao_axes, ebo_axes);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(axises), &axises, GL_STATIC_COPY);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(vert_indices), &vert_indices, GL_STATIC_COPY);
+	genindices(vbo_square, vao_square);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(input_square), &input_square, GL_STATIC_COPY);
+	genindices(vbo_strip, vao_strip);
+
+	funcy f;
+	int quality = 20;
+	std::vector<vertex> dots = calculate(f, quality);
+	std::vector<int> dots_ind = calculate_ind(quality);
+	genindices(vbo_f, vao_f, ebo_f);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(vertex) * dots.size(), dots.data(), GL_STATIC_COPY);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(int) * dots_ind.size(), dots_ind.data(), GL_STATIC_COPY);
+
 
 	float time = 0.f;
 	float angle = 0.f;
 	float speed = 1.f;
 	float cube_x = -0.9f, cube_y = -0.9f;
+
 
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LEQUAL);
@@ -310,13 +398,26 @@ int main() try
 				if (0.9f <= mouse_x && mouse_x <= 1.5f &&
 					-0.6f <= mouse_y && mouse_y <= 0.f)
 				{
+					float true_x = (mouse_x - 1.2f) / 0.3f, true_y = (mouse_y + 0.3f) / 0.3f;
+					f.newRoot({ true_x, true_y });
+					dots = calculate(f, quality);
 					mass.push_back({ {mouse_x, mouse_y, 0.f}, {  200, 0, 200, 255} });
+					glBindBuffer(GL_ARRAY_BUFFER, vbo_strip);
+					glBufferData(GL_ARRAY_BUFFER, sizeof(vertex) * mass.size(), mass.data(), GL_STATIC_COPY);
+					glBindBuffer(GL_ARRAY_BUFFER, vbo_f);
+					glBufferData(GL_ARRAY_BUFFER, sizeof(vertex) * dots.size(), dots.data(), GL_STATIC_COPY);
 				}
 			}
 			else if (event.button.button == SDL_BUTTON_RIGHT)
 			{
 				if (!mass.empty()) {
 					mass.pop_back();
+					glBindBuffer(GL_ARRAY_BUFFER, vbo_strip);
+					glBufferData(GL_ARRAY_BUFFER, sizeof(vertex) * mass.size(), mass.data(), GL_STATIC_COPY);
+					f.popRoot();
+					dots = calculate(f, quality);
+					glBindBuffer(GL_ARRAY_BUFFER, vbo_f);
+					glBufferData(GL_ARRAY_BUFFER, sizeof(vertex) * dots.size(), dots.data(), GL_STATIC_COPY);
 				}
 			}
 			break;
@@ -341,6 +442,24 @@ int main() try
 
 		if (button_down[SDLK_LEFT]) angle -= dt * speed;
 		if (button_down[SDLK_RIGHT]) angle += dt * speed;
+		if (button_down[SDLK_UP]) {
+			quality++;
+			dots = calculate(f, quality);
+			dots_ind = calculate_ind(quality);
+			glBindBuffer(GL_ARRAY_BUFFER, vbo_f);
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo_f);
+			glBufferData(GL_ARRAY_BUFFER, sizeof(vertex) * dots.size(), dots.data(), GL_STATIC_COPY);
+			glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(int) * dots_ind.size(), dots_ind.data(), GL_STATIC_COPY);
+		}
+		if (button_down[SDLK_DOWN] && quality > 1) {
+			quality--;
+			dots = calculate(f, quality);
+			dots_ind = calculate_ind(quality);
+			glBindBuffer(GL_ARRAY_BUFFER, vbo_f);
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo_f);
+			glBufferData(GL_ARRAY_BUFFER, sizeof(vertex) * dots.size(), dots.data(), GL_STATIC_COPY);
+			glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(int) * dots_ind.size(), dots_ind.data(), GL_STATIC_COPY);
+		}
 
 		float near = 0.1f, far = 10.f;
 		float right = 1.1f * near, top = 1.1f * near * height / width;
@@ -373,25 +492,25 @@ int main() try
 
 		glUseProgram(program);
 		glUniformMatrix4fv(view_location, 1, GL_TRUE, view);
-
 		glUniformMatrix4fv(transform_location, 1, GL_TRUE, transform);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(cube_vertices), &cube_vertices, GL_STATIC_COPY);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cube_indices), &cube_indices, GL_STATIC_COPY);
-		glDrawElements(GL_TRIANGLES, 18, GL_UNSIGNED_INT, 0);
 
+		//glBindVertexArray(vao_cube);
+		//glDrawElements(GL_TRIANGLES, 18, GL_UNSIGNED_INT, 0);
 
-		glBufferData(GL_ARRAY_BUFFER, sizeof(axises), &axises, GL_STATIC_COPY);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(vert_indices), &vert_indices, GL_STATIC_COPY);
-		glDrawElements(GL_LINE_STRIP, 5, GL_UNSIGNED_INT, 0);
+		//glBindVertexArray(vao_axes);
+		//glDrawElements(GL_LINE_STRIP, 5, GL_UNSIGNED_INT, 0);
+
+		glBindVertexArray(vao_f);
+		glDrawElements(GL_TRIANGLES, dots_ind.size(), GL_UNSIGNED_INT, 0);
 
 
 		glUseProgram(program_2D);
 		glUniformMatrix4fv(view_location_2D, 1, GL_TRUE, view_2D);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(input_square), &input_square, GL_STATIC_COPY);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(is_indices), &is_indices, GL_STATIC_COPY);
-		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
-		glBufferData(GL_ARRAY_BUFFER, sizeof(vertex) * mass.size(), mass.data(), GL_STATIC_COPY);
+		glBindVertexArray(vao_square);
+		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+		glBindVertexArray(vao_strip);
 		glDrawArrays(GL_LINE_STRIP, 0, mass.size());
 
 		SDL_GL_SwapWindow(window);
