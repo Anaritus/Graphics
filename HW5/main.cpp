@@ -1,4 +1,4 @@
-#ifdef WIN32
+﻿#ifdef WIN32
 #include <SDL.h>
 #undef main
 #else
@@ -15,6 +15,8 @@
 #include <map>
 #include <cmath>
 #include <test_image.h>
+#include <BMP.h>
+
 
 std::string to_string(std::string_view str)
 {
@@ -53,8 +55,7 @@ in vec2 texpos;
 layout (location = 0) out vec4 out_color;
 void main()
 {
-	//out_color = (texture(tex, texpos) + texture(texcat, texpos)) / 2;
-	out_color = texture(texcat, texpos);
+	out_color = (texture(tex, texpos) + texture(texcat, texpos)) / 2;
 }
 )";
 
@@ -97,6 +98,8 @@ GLuint create_program(GLuint vertex_shader, GLuint fragment_shader)
 	return result;
 }
 
+
+
 struct vec3
 {
 	float x;
@@ -112,10 +115,10 @@ struct vertex
 
 static vertex plane_vertices[]
 {
-	{{-10.f, 0.f, -10.f}, {1, 1}},
+	{{-10.f, 0.f, -10.f}, {0, 1}},
 	{{-10.f, 0.f,  10.f}, {0, 0}},
-	{{ 10.f, 0.f, -10.f}, {1, 0}},
-	{{ 10.f, 0.f,  10.f}, {0, 1}},
+	{{ 10.f, 0.f, -10.f}, {1, 1}},
+	{{ 10.f, 0.f,  10.f}, {1, 0}},
 };
 
 static std::uint32_t plane_indices[]
@@ -123,9 +126,9 @@ static std::uint32_t plane_indices[]
 	0, 1, 2, 2, 1, 3,
 };
 
-static std::uint8_t checker_board[1024][1024][4];
+static std::uint8_t checker_board[2048][2048][4];
 
-std::vector<std::uint32_t> red_pixels(512 * 512,
+std::vector<std::uint32_t> red_pixels(1024 * 1204,
 	0xff0000ffu);
 
 std::vector<std::uint32_t> green_pixels(512 * 512,
@@ -200,15 +203,15 @@ int main() try
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void*)(0));
 	glEnableVertexAttribArray(1);
 	glVertexAttribPointer(1, 2, GL_UNSIGNED_SHORT, GL_FALSE, sizeof(vertex), (void*)(sizeof(vec3)));
-	
+
 	GLuint texture;
 	glGenTextures(1, &texture);
 	glBindTexture(GL_TEXTURE_2D, texture);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	for (int i = 0; i < 1024; i++)
+	for (int i = 0; i < 2048; i++)
 	{
-		for (int j = 0; j < 1024; j++)
+		for (int j = 0; j < 2048; j++)
 		{
 			checker_board[i][j][0] = 255 * ((i + j) % 2);
 			checker_board[i][j][1] = 255 * ((i + j) % 2);
@@ -216,12 +219,12 @@ int main() try
 			checker_board[i][j][3] = 255;
 		}
 	}
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1024, 1024, 0, GL_RGBA, GL_UNSIGNED_BYTE, &checker_board);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 2048, 2048, 0, GL_RGBA, GL_UNSIGNED_BYTE, &checker_board);
 	glGenerateMipmap(GL_TEXTURE_2D);
-	glTexImage2D(GL_TEXTURE_2D, 1, GL_RGBA8, 512, 512, 0, GL_RGBA, GL_UNSIGNED_BYTE, red_pixels.data());
-	glTexImage2D(GL_TEXTURE_2D, 2, GL_RGBA8, 256, 256, 0, GL_RGBA, GL_UNSIGNED_BYTE, green_pixels.data());
-	glTexImage2D(GL_TEXTURE_2D, 3, GL_RGBA8, 128, 128, 0, GL_RGBA, GL_UNSIGNED_BYTE, blue_pixels.data());
-	
+	glTexImage2D(GL_TEXTURE_2D, 1, GL_RGBA8, 1024, 1024, 0, GL_RGBA, GL_UNSIGNED_BYTE, red_pixels.data());
+	glTexImage2D(GL_TEXTURE_2D, 2, GL_RGBA8, 512, 512, 0, GL_RGBA, GL_UNSIGNED_BYTE, green_pixels.data());
+	glTexImage2D(GL_TEXTURE_2D, 3, GL_RGBA8, 256, 256, 0, GL_RGBA, GL_UNSIGNED_BYTE, blue_pixels.data());
+
 	GLuint cat;
 	glActiveTexture(GL_TEXTURE1);
 	glGenTextures(1, &cat);
@@ -230,6 +233,19 @@ int main() try
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, test_image_width, test_image_height, 0, GL_RGB, GL_UNSIGNED_BYTE, test_image);
+
+	GLuint durka;
+	glActiveTexture(GL_TEXTURE2);
+	glGenTextures(1, &durka);
+	glBindTexture(GL_TEXTURE_2D, durka);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	BMP durk = BMP("E:/soft/graphics/practice1/durka.bmp");
+	int32_t dwidth = durk.bmp_info_header.width, dheight = durk.bmp_info_header.height;
+	std::vector<uint8_t> durimage = durk.data;
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 928, 558, 0, GL_BGRA, GL_UNSIGNED_BYTE, durimage.data());
+	
 
 	auto last_frame_start = std::chrono::high_resolution_clock::now();
 
@@ -297,7 +313,7 @@ int main() try
 		};
 
 		glUseProgram(program);
-		glUniform1i(tex_location, 0);
+		glUniform1i(tex_location, 2);
 		glUniform1i(texcat_location, 1);
 		glUniformMatrix4fv(view_location, 1, GL_TRUE, view);
 		glUniformMatrix4fv(projection_location, 1, GL_TRUE, projection);
@@ -307,6 +323,8 @@ int main() try
 		glBindTexture(GL_TEXTURE_2D, texture);
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_2D, cat);
+		//glActiveTexture(GL_TEXTURE2);
+		//glBindTexture(GL_TEXTURE_2D, durka);
 
 		glDrawElements(GL_TRIANGLES, std::size(plane_indices), GL_UNSIGNED_INT, nullptr);
 
