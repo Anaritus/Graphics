@@ -574,7 +574,7 @@ int main() try
 	float speed = 1.f;
 	float cube_x = -0.9f, cube_y = -0.9f;
 	bool flag = 1;
-
+	bool qflag = 1;
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LEQUAL);
 	//glEnable(GL_CULL_FACE);
@@ -682,7 +682,7 @@ int main() try
 		if (button_down[SDLK_LEFT]) angle -= dt * speed;
 		if (button_down[SDLK_RIGHT]) angle += dt * speed;
 		if (button_down[SDLK_UP]) {
-			quality++;
+			quality += 10;
 			dots = calculate(f, quality);
 			dots_ind = calculate_ind(quality);
 			glBindBuffer(GL_ARRAY_BUFFER, vbo_f);
@@ -703,8 +703,8 @@ int main() try
 				glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(int) * dots_indq.size(), dots_indq.data(), GL_STATIC_COPY);
 			}
 		}
-		if (button_down[SDLK_DOWN] && quality > 1) {
-			quality--;
+		if (button_down[SDLK_DOWN] && quality > 10) {
+			quality -= 10;
 			dots = calculate(f, quality);
 			dots_ind = calculate_ind(quality);
 			glBindBuffer(GL_ARRAY_BUFFER, vbo_f);
