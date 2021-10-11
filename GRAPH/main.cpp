@@ -14,6 +14,7 @@
 #include <iostream>
 #include <chrono>
 #include <vector>
+#include <algorithm>
 #include <map>
 #include <cmath>
 
@@ -114,6 +115,11 @@ struct vec3
 	float x;
 	float y;
 	float z;
+
+	bool operator==(const vec3& r)
+	{
+		return this->x == r.x && this->y == r.y && this->z == r.z;
+	}
 };
 
 struct vec2
@@ -126,6 +132,9 @@ struct vertex
 {
 	vec3 position;
 	std::uint8_t color[4];
+	bool operator==(const vertex& r) {
+		return this->position == r.position && this->color == r.color;
+	}
 };
 
 struct funcy
@@ -135,7 +144,7 @@ struct funcy
 
 	void normalize()
 	{
-		float my = 0;
+		float my = 0.8f;
 		for (auto t : roots) {
 			float y = apply(t).position.y;
 			if (abs(y) > my) my = abs(y);
@@ -169,7 +178,7 @@ struct funcy
 	}
 };
 
-void genindices(GLuint array_buffer, GLuint array, GLuint ebo=0)
+void genindices(GLuint array_buffer, GLuint array, GLuint ebo = 0)
 {
 	glBindVertexArray(array);
 	glBindBuffer(GL_ARRAY_BUFFER, array_buffer);
@@ -209,6 +218,181 @@ std::vector<int> calculate_ind(int quality)
 	return dots_ind;
 }
 
+vec3 interpolate(vec3 left, vec3 right, float level)
+{
+	float a = (left.y - level) / (left.y - right.y);
+	float b = (level - right.y) / (left.y - right.y);
+	return { left.x * b + right.x * a, level + 0.001f, left.z * b + right.z * a };
+}
+
+vertex blackV(vec3 point)
+{
+	return { point, {255, 255, 255, 255} };
+}
+
+int getInd(std::vector<std::pair<vec3, int>> points, vec3 point) {
+	for (auto p : points) {
+		if (p.first == point) {
+			return p.second;
+		}
+	}
+}
+
+std::pair <std::vector<vertex>, std::vector<int>> calculateSquare(int quality, funcy f, float level)
+{
+	std::vector<vertex> dots;
+	std::vector<int> inds;
+	int n = 0;
+	vec3 lu, ru, ld, rd;
+	vec3 point1, point2;
+	std::vector<std::pair<vec3, int>> pointToInd;
+	int i, j;
+	for (int y = 0; y < quality; y++) {
+		for (int x = 0; x < quality; x++) {
+			int caseType = 0;
+			ld = f.apply({ 2.0f * x / quality - 1, 2.0f * y / quality - 1 }).position;
+			lu = f.apply({ 2.0f * x / quality - 1, 2.0f * (y + 1) / quality - 1 }).position;
+			rd = f.apply({ 2.0f * (x + 1) / quality - 1, 2.0f * y / quality - 1 }).position;
+			ru = f.apply({ 2.0f * (x + 1) / quality - 1, 2.0f * (y + 1) / quality - 1 }).position;
+			caseType += rd.y > level;
+			caseType += (ld.y > level) * 2;
+			caseType += (ru.y > level) * 4;
+			caseType += (lu.y > level) * 8;
+			if (caseType > 7) caseType = 15 - caseType;
+			switch (caseType)
+			{
+			case 1: //0001
+				point1 = interpolate(ld, rd, level);
+				if (y == 0) {
+					dots.push_back(blackV(point1));
+					pointToInd.push_back({ point1, n });
+					n++;
+				}
+				i = getInd(pointToInd, point1);
+				point2 = interpolate(rd, ru, level);
+				dots.push_back(blackV(point2));
+				pointToInd.push_back({ point2, n });
+				j = n;
+				n++;
+				inds.push_back(i);
+				inds.push_back(j);
+				continue;
+			case 2: //0010
+				point1 = interpolate(ld, rd, level);
+				if (y == 0) {
+					dots.push_back(blackV(point1));
+					pointToInd.push_back({ point1, n });
+					n++;
+				}
+				i = getInd(pointToInd, point1);
+				point2 = interpolate(ld, lu, level);
+				if (x == 0) {
+					dots.push_back(blackV(point2));
+					pointToInd.push_back({ point2, n });
+					n++;
+				}
+				j = getInd(pointToInd, point2);
+				inds.push_back(i);
+				inds.push_back(j);
+				continue;
+			case 3: //0011
+				point1 = interpolate(rd, ru, level);
+				dots.push_back(blackV(point1));
+				pointToInd.push_back({ point1, n });
+				i = n;
+				n++;
+				point2 = interpolate(ld, lu, level);
+				if (x == 0) {
+					dots.push_back(blackV(point2));
+					pointToInd.push_back({ point2, n });
+					n++;
+				}
+				j = getInd(pointToInd, point2);
+				inds.push_back(i);
+				inds.push_back(j);
+				continue;
+			case 4: //0100
+				point1 = interpolate(lu, ru, level);
+				dots.push_back(blackV(point1));
+				pointToInd.push_back({ point1, n });
+				i = n;
+				n++;
+				point2 = interpolate(rd, ru, level);
+				dots.push_back(blackV(point2));
+				pointToInd.push_back({ point2, n });
+				j = n;
+				n++;
+				inds.push_back(i);
+				inds.push_back(j);
+				continue;
+			case 5: //0101
+				point1 = interpolate(lu, ru, level);
+				dots.push_back(blackV(point1));
+				pointToInd.push_back({ point1, n });
+				i = n;
+				n++;
+				point2 = interpolate(ld, rd, level);
+				if (y == 0) {
+					dots.push_back(blackV(point2));
+					pointToInd.push_back({ point2, n });
+					n++;
+				}
+				j = getInd(pointToInd, point2);
+				inds.push_back(i);
+				inds.push_back(j);
+				continue;
+			case 6: //0110
+				point1 = interpolate(lu, ru, level);
+				dots.push_back(blackV(point1));
+				pointToInd.push_back({ point1, n });
+				i = n;
+				n++;
+				point2 = interpolate(ld, lu, level);
+				if (x == 0) {
+					dots.push_back(blackV(point2));
+					pointToInd.push_back({ point2, n });
+					n++;
+				}
+				j = getInd(pointToInd, point2);
+				inds.push_back(i);
+				inds.push_back(j);
+				point1 = interpolate(rd, ru, level);
+				dots.push_back(blackV(point1));
+				pointToInd.push_back({ point1, n });
+				i = n;
+				n++;
+				point2 = interpolate(ld, rd, level);
+				if (y == 0) {
+					dots.push_back(blackV(point2));
+					pointToInd.push_back({ point2, n });
+					n++;
+				}
+				j = getInd(pointToInd, point2);
+				inds.push_back(i);
+				inds.push_back(j);
+				continue;
+			case 7: //0111
+				point1 = interpolate(lu, ru, level);
+				dots.push_back(blackV(point1));
+				pointToInd.push_back({ point1, n });
+				i = n;
+				n++;
+				point2 = interpolate(ld, lu, level);
+				if (x == 0) {
+					dots.push_back(blackV(point2));
+					pointToInd.push_back({ point2, n });
+					n++;
+				}
+				j = getInd(pointToInd, point2);
+				inds.push_back(i);
+				inds.push_back(j);
+				continue;
+			}
+		}
+	}
+	return std::pair(dots, inds);
+}
+
 static vertex cube_vertices[]
 {
 	// -X
@@ -227,7 +411,7 @@ static vertex cube_vertices[]
 	{{ 1.f,  1.f, -1.f}, {  255, 255, 255, 255}},
 	{{-1.f,  1.f, -1.f}, {  255, 255, 255, 255}}
 };
- 
+
 static vertex axises[]
 {
 	{{-0.99f,  1.f, -0.99f}, {0, 0, 0, 0}}, //x
@@ -336,7 +520,7 @@ int main() try
 	glGenVertexArrays(1, &vao_cube);
 	glGenVertexArrays(1, &vao_axes);
 	glGenVertexArrays(1, &vao_square);
-	glGenVertexArrays(1, &vao_strip);	
+	glGenVertexArrays(1, &vao_strip);
 	glGenVertexArrays(1, &vao_f);
 
 
@@ -359,11 +543,37 @@ int main() try
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(int) * dots_ind.size(), dots_ind.data(), GL_STATIC_COPY);
 
 
+	int squality = 10;
+	std::vector<GLuint> sqvao(squality);
+	glGenVertexArrays(squality, sqvao.data());
+	std::vector<GLuint> sqvbo(squality);
+	glGenBuffers(squality, sqvbo.data());
+	std::vector<GLuint> sqebo(squality);
+	glGenBuffers(squality, sqebo.data());
+	float level;
+	std::pair<std::vector<vertex>, std::vector<int>> pair;
+	std::vector<vertex> dotsq;
+	std::vector<int> dots_indq;
+	std::vector<int> ind_sizes;
+	for (int x = 0; x < squality; x++)
+	{
+		level = -0.8f + 1.6f * (x + 1) / (squality + 1);
+		pair = calculateSquare(quality, f, level);
+		dotsq = pair.first;
+		dots_indq = pair.second;
+		ind_sizes.push_back(dots_indq.size());
+		genindices(sqvbo[x], sqvao[x], sqebo[x]);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(vertex) * dotsq.size(), dotsq.data(), GL_STATIC_COPY);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(int) * dots_indq.size(), dots_indq.data(), GL_STATIC_COPY);
+	}
+
+
+
 	float time = 0.f;
 	float angle = 0.f;
 	float speed = 1.f;
 	float cube_x = -0.9f, cube_y = -0.9f;
-
+	bool flag = 1;
 
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LEQUAL);
@@ -406,6 +616,19 @@ int main() try
 					glBufferData(GL_ARRAY_BUFFER, sizeof(vertex) * mass.size(), mass.data(), GL_STATIC_COPY);
 					glBindBuffer(GL_ARRAY_BUFFER, vbo_f);
 					glBufferData(GL_ARRAY_BUFFER, sizeof(vertex) * dots.size(), dots.data(), GL_STATIC_COPY);
+					ind_sizes.clear();
+					for (int x = 0; x < squality; x++)
+					{
+						level = -0.8f + 1.6f * (x + 1) / (squality + 1);
+						pair = calculateSquare(quality, f, level);
+						dotsq = pair.first;						
+						dots_indq = pair.second;
+						ind_sizes.push_back(dots_indq.size());
+						glBindBuffer(GL_ARRAY_BUFFER, sqvbo[x]);
+						glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sqebo[x]);
+						glBufferData(GL_ARRAY_BUFFER, sizeof(vertex) * dotsq.size(), dotsq.data(), GL_STATIC_COPY);
+						glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(int) * dots_indq.size(), dots_indq.data(), GL_STATIC_COPY);
+					}
 				}
 			}
 			else if (event.button.button == SDL_BUTTON_RIGHT)
@@ -418,6 +641,19 @@ int main() try
 					dots = calculate(f, quality);
 					glBindBuffer(GL_ARRAY_BUFFER, vbo_f);
 					glBufferData(GL_ARRAY_BUFFER, sizeof(vertex) * dots.size(), dots.data(), GL_STATIC_COPY);
+					ind_sizes.clear();
+					for (int x = 0; x < squality; x++)
+					{
+						level = -0.8f + 1.6f * (x + 1) / (squality + 1);
+						pair = calculateSquare(quality, f, level);
+						dotsq = pair.first;
+						dots_indq = pair.second;
+						ind_sizes.push_back(dots_indq.size());
+						glBindBuffer(GL_ARRAY_BUFFER, sqvbo[x]);
+						glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sqebo[x]);
+						glBufferData(GL_ARRAY_BUFFER, sizeof(vertex) * dotsq.size(), dotsq.data(), GL_STATIC_COPY);
+						glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(int) * dots_indq.size(), dots_indq.data(), GL_STATIC_COPY);
+					}
 				}
 			}
 			break;
@@ -426,6 +662,9 @@ int main() try
 			break;
 		case SDL_KEYUP:
 			button_down[event.key.keysym.sym] = false;
+			if (event.key.keysym.sym == SDLK_a) {
+				flag = 1 - flag;
+			}
 			break;
 		}
 
@@ -450,6 +689,19 @@ int main() try
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo_f);
 			glBufferData(GL_ARRAY_BUFFER, sizeof(vertex) * dots.size(), dots.data(), GL_STATIC_COPY);
 			glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(int) * dots_ind.size(), dots_ind.data(), GL_STATIC_COPY);
+			ind_sizes.clear();
+			for (int x = 0; x < squality; x++)
+			{
+				level = -0.8f + 1.6f * (x + 1) / (squality + 1);
+				pair = calculateSquare(quality, f, level);
+				dotsq = pair.first;
+				dots_indq = pair.second;
+				ind_sizes.push_back(dots_indq.size());
+				glBindBuffer(GL_ARRAY_BUFFER, sqvbo[x]);
+				glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sqebo[x]);
+				glBufferData(GL_ARRAY_BUFFER, sizeof(vertex) * dotsq.size(), dotsq.data(), GL_STATIC_COPY);
+				glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(int) * dots_indq.size(), dots_indq.data(), GL_STATIC_COPY);
+			}
 		}
 		if (button_down[SDLK_DOWN] && quality > 1) {
 			quality--;
@@ -459,6 +711,19 @@ int main() try
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo_f);
 			glBufferData(GL_ARRAY_BUFFER, sizeof(vertex) * dots.size(), dots.data(), GL_STATIC_COPY);
 			glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(int) * dots_ind.size(), dots_ind.data(), GL_STATIC_COPY);
+			ind_sizes.clear();
+			for (int x = 0; x < squality; x++)
+			{
+				level = -0.8f + 1.6f * (x + 1) / (squality + 1);
+				pair = calculateSquare(quality, f, level);
+				dotsq = pair.first;
+				dots_indq = pair.second;
+				ind_sizes.push_back(dots_indq.size());
+				glBindBuffer(GL_ARRAY_BUFFER, sqvbo[x]);
+				glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sqebo[x]);
+				glBufferData(GL_ARRAY_BUFFER, sizeof(vertex) * dotsq.size(), dotsq.data(), GL_STATIC_COPY);
+				glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(int) * dots_indq.size(), dots_indq.data(), GL_STATIC_COPY);
+			}
 		}
 
 		float near = 0.1f, far = 10.f;
@@ -494,14 +759,23 @@ int main() try
 		glUniformMatrix4fv(view_location, 1, GL_TRUE, view);
 		glUniformMatrix4fv(transform_location, 1, GL_TRUE, transform);
 
-		//glBindVertexArray(vao_cube);
-		//glDrawElements(GL_TRIANGLES, 18, GL_UNSIGNED_INT, 0);
+		if (flag) {
+			glBindVertexArray(vao_cube);
+			glDrawElements(GL_TRIANGLES, 18, GL_UNSIGNED_INT, 0);
 
-		//glBindVertexArray(vao_axes);
-		//glDrawElements(GL_LINE_STRIP, 5, GL_UNSIGNED_INT, 0);
+			glBindVertexArray(vao_axes);
+			glDrawElements(GL_LINE_STRIP, 5, GL_UNSIGNED_INT, 0);
+		}
 
 		glBindVertexArray(vao_f);
 		glDrawElements(GL_TRIANGLES, dots_ind.size(), GL_UNSIGNED_INT, 0);
+
+		int i = 0;
+		for (auto vao : sqvao) {
+			glBindVertexArray(vao);
+			glDrawElements(GL_LINES, ind_sizes[i], GL_UNSIGNED_INT, 0);
+			i++;
+		}
 
 
 		glUseProgram(program_2D);
