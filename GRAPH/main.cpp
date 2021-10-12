@@ -133,9 +133,6 @@ struct vertex
 {
 	vec3 position;
 	std::uint8_t color[4];
-	bool operator==(const vertex& r) {
-		return this->position == r.position && this->color == r.color;
-	}
 };
 
 struct funcy
@@ -836,6 +833,11 @@ int main() try
 
 		glBindVertexArray(vao_strip);
 		glDrawArrays(GL_LINE_STRIP, 0, mass.size());
+
+		if (mass.size()) {
+			glPointSize(10);
+			glDrawArrays(GL_POINTS, 0, 1);
+		}
 
 		SDL_GL_SwapWindow(window);
 	}
