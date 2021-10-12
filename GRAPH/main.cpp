@@ -1,4 +1,4 @@
-﻿#ifdef WIN32
+#ifdef WIN32
 #include <SDL.h>
 #undef main
 #else
@@ -37,13 +37,14 @@ const char vertex_shader_source[] =
 R"(#version 330 core
 uniform mat4 view;
 uniform mat4 transform;
+uniform int black;
 layout (location = 0) in vec3 in_position;
 layout (location = 1) in vec4 in_color;
 out vec4 color;
 void main()
 {
 	gl_Position = view * transform * vec4(in_position, 1.0);
-	color = in_color;
+	color = black * in_color;
 }
 )";
 
@@ -498,6 +499,7 @@ int main() try
 	GLuint view_location = glGetUniformLocation(program, "view");
 	GLuint view_location_2D = glGetUniformLocation(program_2D, "view");
 	GLuint transform_location = glGetUniformLocation(program, "transform");
+	GLuint black_location = glGetUniformLocation(program, "black");
 
 	auto last_frame_start = std::chrono::high_resolution_clock::now();
 
@@ -621,7 +623,7 @@ int main() try
 					{
 						level = -0.8f + 1.6f * (x + 1) / (squality + 1);
 						pair = calculateSquare(quality, f, level);
-						dotsq = pair.first;						
+						dotsq = pair.first;
 						dots_indq = pair.second;
 						ind_sizes.push_back(dots_indq.size());
 						glBindBuffer(GL_ARRAY_BUFFER, sqvbo[x]);
@@ -665,6 +667,52 @@ int main() try
 			if (event.key.keysym.sym == SDLK_a) {
 				flag = 1 - flag;
 			}
+			if (event.key.keysym.sym == SDLK_w) {
+				squality++;
+				GLuint newvao, newvbo, newebo;
+				glGenVertexArrays(1, &newvao);
+				glGenBuffers(1, &newvbo);
+				glGenBuffers(1, &newebo);
+				genindices(newvbo, newvao, newebo);
+				sqvao.push_back(newvao);
+				sqvbo.push_back(newvbo);
+				sqebo.push_back(newebo);
+				ind_sizes.clear();
+				for (int x = 0; x < squality; x++)
+				{
+					level = -0.8f + 1.6f * (x + 1) / (squality + 1);
+					pair = calculateSquare(quality, f, level);
+					dotsq = pair.first;
+					dots_indq = pair.second;
+					ind_sizes.push_back(dots_indq.size());
+					glBindBuffer(GL_ARRAY_BUFFER, sqvbo[x]);
+					glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sqebo[x]);
+					glBufferData(GL_ARRAY_BUFFER, sizeof(vertex) * dotsq.size(), dotsq.data(), GL_STATIC_COPY);
+					glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(int) * dots_indq.size(), dots_indq.data(), GL_STATIC_COPY);
+				}
+			}
+			if (event.key.keysym.sym == SDLK_s) {
+				squality--;
+				glDeleteBuffers(1, &sqvbo[squality]);
+				glDeleteBuffers(1, &sqebo[squality]);
+				glDeleteVertexArrays(1, &sqvao[squality]);
+				sqvao.pop_back();
+				sqvbo.pop_back();
+				sqebo.pop_back();
+				ind_sizes.clear();
+				for (int x = 0; x < squality; x++)
+				{
+					level = -0.8f + 1.6f * (x + 1) / (squality + 1);
+					pair = calculateSquare(quality, f, level);
+					dotsq = pair.first;
+					dots_indq = pair.second;
+					ind_sizes.push_back(dots_indq.size());
+					glBindBuffer(GL_ARRAY_BUFFER, sqvbo[x]);
+					glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sqebo[x]);
+					glBufferData(GL_ARRAY_BUFFER, sizeof(vertex) * dotsq.size(), dotsq.data(), GL_STATIC_COPY);
+					glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(int) * dots_indq.size(), dots_indq.data(), GL_STATIC_COPY);
+				}
+			}
 			break;
 		}
 
@@ -682,7 +730,7 @@ int main() try
 		if (button_down[SDLK_LEFT]) angle -= dt * speed;
 		if (button_down[SDLK_RIGHT]) angle += dt * speed;
 		if (button_down[SDLK_UP]) {
-			quality += 10;
+			quality += 1;
 			dots = calculate(f, quality);
 			dots_ind = calculate_ind(quality);
 			glBindBuffer(GL_ARRAY_BUFFER, vbo_f);
@@ -703,8 +751,8 @@ int main() try
 				glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(int) * dots_indq.size(), dots_indq.data(), GL_STATIC_COPY);
 			}
 		}
-		if (button_down[SDLK_DOWN] && quality > 10) {
-			quality -= 10;
+		if (button_down[SDLK_DOWN] && quality > 3) {
+			quality -= 1;
 			dots = calculate(f, quality);
 			dots_ind = calculate_ind(quality);
 			glBindBuffer(GL_ARRAY_BUFFER, vbo_f);
@@ -758,6 +806,7 @@ int main() try
 		glUseProgram(program);
 		glUniformMatrix4fv(view_location, 1, GL_TRUE, view);
 		glUniformMatrix4fv(transform_location, 1, GL_TRUE, transform);
+		glUniform1i(black_location, 1);
 
 		if (flag) {
 			glBindVertexArray(vao_cube);
@@ -770,6 +819,7 @@ int main() try
 		glBindVertexArray(vao_f);
 		glDrawElements(GL_TRIANGLES, dots_ind.size(), GL_UNSIGNED_INT, 0);
 
+		glUniform1i(black_location, 1 - flag);
 		int i = 0;
 		for (auto vao : sqvao) {
 			glBindVertexArray(vao);
