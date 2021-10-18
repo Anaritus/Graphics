@@ -1,4 +1,4 @@
-#ifdef WIN32
+﻿#ifdef WIN32
 #include <SDL.h>
 #undef main
 #else
@@ -38,12 +38,14 @@ R"(#version 330 core
 uniform mat4 view;
 uniform mat4 transform;
 uniform int black;
-layout (location = 0) in vec3 in_position;
+layout (location = 0) in float x;
 layout (location = 1) in vec4 in_color;
+layout (location = 2) in float z;
+layout (location = 3) in float y;
 out vec4 color;
 void main()
 {
-	gl_Position = view * transform * vec4(in_position, 1.0);
+	gl_Position = view * transform * vec4(x, y, z, 1.0);
 	color = black * in_color;
 }
 )";
@@ -61,12 +63,14 @@ void main()
 const char vertex_shader_source_2D[] =
 R"(#version 330 core
 uniform mat4 view;
-layout (location = 0) in vec3 in_position;
+layout (location = 0) in float x;
 layout (location = 1) in vec4 in_color;
+layout (location = 2) in float z;
+layout (location = 3) in float y;
 out vec4 color;
 void main()
 {
-	gl_Position = view * vec4(in_position, 1.0);
+	gl_Position = view * vec4(x, y, z, 1.0);
 	color = in_color;
 }
 )";
@@ -176,15 +180,21 @@ struct funcy
 	}
 };
 
-void genindices(GLuint array_buffer, GLuint array, GLuint ebo = 0)
+void genindices(GLuint array_buffer, GLuint array, GLuint ebo = 0, GLuint another_buffer=0)
 {
 	glBindVertexArray(array);
-	glBindBuffer(GL_ARRAY_BUFFER, array_buffer);
 	if (ebo != 0) glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+	glBindBuffer(GL_ARRAY_BUFFER, array_buffer);
 	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void*)(0));
+	glVertexAttribPointer(0, 1, GL_FLOAT, GL_FALSE, sizeof(vertex), (void*)(0));
+	glEnableVertexAttribArray(2);
+	glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(vertex), (void*)(2 * sizeof(float)));
+	if (another_buffer != 0) glBindBuffer(GL_ARRAY_BUFFER, another_buffer);
+	glEnableVertexAttribArray(3);
+	glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(vertex), (void*)(sizeof(float)));
 	glEnableVertexAttribArray(1);
 	glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(vertex), (void*)(sizeof(vec3)));
+	
 }
 
 std::vector<vertex> calculate(funcy f, int quality)
@@ -503,7 +513,7 @@ int main() try
 	std::vector<vertex> mass;
 
 	GLuint vao_cube, vao_axes, vao_square, vao_strip, vao_f;
-	GLuint vbo_cube, vbo_axes, vbo_square, vbo_strip, vbo_f;
+	GLuint vbo_cube, vbo_axes, vbo_square, vbo_strip, vbo_f, vbo_xy;
 	GLuint ebo_cube, ebo_axes, ebo_f;
 
 	glGenBuffers(1, &vbo_cube);
@@ -511,6 +521,7 @@ int main() try
 	glGenBuffers(1, &vbo_strip);
 	glGenBuffers(1, &vbo_square);
 	glGenBuffers(1, &vbo_f);
+	glGenBuffers(1, &vbo_xy);
 
 	glGenBuffers(1, &ebo_cube);
 	glGenBuffers(1, &ebo_axes);
@@ -537,8 +548,12 @@ int main() try
 	int quality = 20;
 	std::vector<vertex> dots = calculate(f, quality);
 	std::vector<int> dots_ind = calculate_ind(quality);
-	genindices(vbo_f, vao_f, ebo_f);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertex) * dots.size(), dots.data(), GL_STATIC_COPY);
+	genindices(vbo_xy, vao_f, ebo_f, vbo_f);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo_xy);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(vertex)* dots.size(), dots.data(), GL_STATIC_COPY);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo_f);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(vertex)* dots.size(), dots.data(), GL_STATIC_COPY);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo_f);
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(int) * dots_ind.size(), dots_ind.data(), GL_STATIC_COPY);
 
 
@@ -734,6 +749,8 @@ int main() try
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo_f);
 			glBufferData(GL_ARRAY_BUFFER, sizeof(vertex) * dots.size(), dots.data(), GL_STATIC_COPY);
 			glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(int) * dots_ind.size(), dots_ind.data(), GL_STATIC_COPY);
+			glBindBuffer(GL_ARRAY_BUFFER, vbo_xy);
+			glBufferData(GL_ARRAY_BUFFER, sizeof(vertex)* dots.size(), dots.data(), GL_STATIC_COPY);
 			ind_sizes.clear();
 			for (int x = 0; x < squality; x++)
 			{
@@ -756,6 +773,8 @@ int main() try
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo_f);
 			glBufferData(GL_ARRAY_BUFFER, sizeof(vertex) * dots.size(), dots.data(), GL_STATIC_COPY);
 			glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(int) * dots_ind.size(), dots_ind.data(), GL_STATIC_COPY);
+			glBindBuffer(GL_ARRAY_BUFFER, vbo_xy);
+			glBufferData(GL_ARRAY_BUFFER, sizeof(vertex)* dots.size(), dots.data(), GL_STATIC_COPY);
 			ind_sizes.clear();
 			for (int x = 0; x < squality; x++)
 			{
