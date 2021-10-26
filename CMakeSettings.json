@@ -1,0 +1,14 @@
+﻿{
+  "configurations": [
+    {
+      "name": "x64-Debug",
+      "generator": "Ninja",
+      "configurationType": "Debug",
+      "inheritEnvironments": [ "msvc_x64_x64" ],
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeCommandArgs": "-DGLEW_ROOT='E:\\soft\\glew-2.1.0' -DSDL2_ROOT='E:\\soft\\SDL2-2.0.16'",
+      "ctestCommandArgs": ""
+    }
+  ]
+}
