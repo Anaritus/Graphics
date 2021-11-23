@@ -214,6 +214,8 @@ struct obj
 	GLuint albedo;
 	GLuint normals;
 	GLuint mask;
+	bool hasAspec = false;
+	bool hasMask = false;
 };
 
 std::pair<std::vector<vertex>, std::vector<std::uint32_t>> load_obj(std::istream& input)
@@ -351,20 +353,59 @@ void fill_info(std::vector<vertex>& vertices, std::vector<std::uint32_t> const& 
 std::vector<obj> make_sense(tinyobj::attrib_t attrib, std::vector<tinyobj::shape_t> shapes, std::vector<tinyobj::material_t> materials) {
 	std::vector<obj> objects;
 	for (auto shape : shapes) {
-		obj object;
-		glActiveTexture(GL_TEXTURE0);
-		glGenTextures(1, &object.albedo);
-		glBindTexture(GL_TEXTURE_2D, object.albedo);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		int width, height, channels;
-		//unsigned char* img = stbi_load(materials[shape.mesh.material_ids], &width, &height, &channels, 0);
-		//glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, object.albedo_width, object.albedo_height, 0, GL_RGB, GL_UNSIGNED_BYTE, object.albedo_data);
 		glGenerateMipmap(GL_TEXTURE_2D);
 		size_t index_offset = 0;
 		auto copy = shape.mesh.material_ids;
-		assert(std::unique(copy.begin(), copy.end()) == copy.begin() + 1);
-		for (auto face : shape.mesh.num_face_vertices) {
+		std::map<int, obj> objectOfShape;
+		for (int i = 0; i < shape.mesh.num_face_vertices.size(); i++) {
+			auto face = shape.mesh.num_face_vertices[i];
+			int mat_id = shape.mesh.material_ids[i];
+			if (!objectOfShape.count(mat_id)) {
+				obj object;
+
+				glActiveTexture(GL_TEXTURE0);
+				glGenTextures(1, &object.albedo);
+				glBindTexture(GL_TEXTURE_2D, object.albedo);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+				int width, height, channels;
+				unsigned char* img = stbi_load(materials[mat_id].ambient_texname.c_str(), &width, &height, &channels, 0);
+				glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, img);
+				glGenerateMipmap(GL_TEXTURE_2D);
+
+				glActiveTexture(GL_TEXTURE1);
+				glGenTextures(1, &object.normals);
+				glBindTexture(GL_TEXTURE_2D, object.normals);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+				img = stbi_load(materials[mat_id].normal_texname.c_str(), &width, &height, &channels, 0);
+				glTexImage2D(GL_TEXTURE_2D, 0, GL_R3_G3_B2, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, img);
+				glGenerateMipmap(GL_TEXTURE_2D);
+
+				if (!materials[mat_id].specular_texname.empty()) {
+					glActiveTexture(GL_TEXTURE2);
+					glGenTextures(1, &object.aspec);
+					glBindTexture(GL_TEXTURE_2D, object.aspec);
+					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+					img = stbi_load(materials[mat_id].specular_highlight_texname.c_str(), &width, &height, &channels, 0);
+					glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, img);
+					glGenerateMipmap(GL_TEXTURE_2D);
+					object.hasAspec = true;
+				}
+
+				if (!materials[mat_id].displacement_texname.empty()) {
+					glActiveTexture(GL_TEXTURE3);
+					glGenTextures(1, &object.mask);
+					glBindTexture(GL_TEXTURE_2D, object.mask);
+					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+					img = stbi_load(materials[mat_id].displacement_texname.c_str(), &width, &height, &channels, 0);
+					glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, img);
+					object.hasMask = true;
+				}
+				objectOfShape[mat_id] = object;
+			}
 			size_t fv = size_t(face);
 			for (size_t v = 0; v < fv; v++) {
 				vertex vert;
@@ -383,11 +424,28 @@ std::vector<obj> make_sense(tinyobj::attrib_t attrib, std::vector<tinyobj::shape
 					tinyobj::real_t ty = attrib.texcoords[2 * size_t(idx.texcoord_index) + 1];
 					vert.texcoords = { tx, ty };
 				}
-				object.vertices.push_back(vert);
+				objectOfShape[mat_id].vertices.push_back(vert);
 			}
 			index_offset += fv;
 		}
-		assert(shape.mesh.material_ids.size() == shape.mesh.num_face_vertices.size());
+		for (std::map<int, obj>::iterator iter = objectOfShape.begin(); iter != objectOfShape.end(); iter++) {
+			int mat_id = iter->first;
+			obj object = iter->second;
+			glGenVertexArrays(1, &object.vao);
+			glBindVertexArray(object.vao);
+
+			glGenBuffers(1, &object.vbo);
+			glBindBuffer(GL_ARRAY_BUFFER, object.vbo);
+			glBufferData(GL_ARRAY_BUFFER, object.vertices.size() * sizeof(object.vertices[0]), object.vertices.data(), GL_STATIC_DRAW);
+
+			glEnableVertexAttribArray(0);
+			glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void*)(0));
+			glEnableVertexAttribArray(1);
+			glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void*)(12));
+			glEnableVertexAttribArray(2);
+			glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(vertex), (void*)(24));
+			objects.push_back(object);
+		}
 	}
 	return objects;
 }
@@ -548,6 +606,7 @@ int main() try
 
 	GLuint shadow_map;
 	glGenTextures(1, &shadow_map);
+	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, shadow_map);
 	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -684,6 +743,7 @@ int main() try
 		glBindVertexArray(vao);
 		glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, nullptr);
 
+		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, shadow_map);
 		glGenerateMipmap(GL_TEXTURE_2D);
 
