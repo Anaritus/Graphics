@@ -109,9 +109,13 @@ R"(#version 330 core
 layout (location = 0) out vec4 out_color;
 in vec2 texcoords;
 
+uniform sampler2D tex;
+uniform sampler1D colors;
+
 void main()
 {
-	out_color = vec4(1.0, texcoords.x, texcoords.y, 1.0);
+	float alpha = texture(tex, texcoords).r;
+	out_color = vec4(texture(colors, alpha).rgb, alpha);
 }
 )";
 
@@ -221,16 +225,14 @@ int main() try
 	GLuint view_location = glGetUniformLocation(program, "view");
 	GLuint projection_location = glGetUniformLocation(program, "projection");
 	GLuint camera_pos_location = glGetUniformLocation(program, "camera_pos");
+	GLuint tex_location = glGetUniformLocation(program, "tex");
+	GLuint colors_location = glGetUniformLocation(program, "colors");
 
 	std::vector<particle> particles(256);
 	for (auto & p : particles)
 	{
 		initPart(p);
 	}
-
-	std::vector<char> pixels(1024 * 1024);
-	std::ifstream in(...);
-	in.read((char*)pixels.data(), pixels.size());
 
 	GLuint vao, vbo;
 	glGenVertexArrays(1, &vao);
@@ -248,6 +250,36 @@ int main() try
 
 	glEnableVertexAttribArray(2);
 	glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(particle), (void*)(4 * sizeof(float)));
+
+	std::vector<std::uint8_t> pixels(1024 * 1024);
+	std::ifstream in(PRACTICE_SOURCE_DIRECTORY "/particle.gray", std::ios::binary);
+	in.read((char*)pixels.data(), pixels.size());
+	std::cout << in.gcount() << " " << in.eof();
+
+	GLuint tex;
+	glGenTextures(1, &tex);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, 1024, 1024, 0, GL_RED, GL_UNSIGNED_BYTE, pixels.data());
+	glGenerateMipmap(GL_TEXTURE_2D);
+
+	GLuint colors;
+	glGenTextures(1, &colors);
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_1D, colors);
+	glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+	std::vector<std::uint32_t> fire_pixels(5);
+	fire_pixels[0] = 0xff000000u; //black
+	fire_pixels[1] = 0xff0000ffu; //red
+	fire_pixels[2] = 0xff0099ffu; //orange
+	fire_pixels[3] = 0xff00ffffu; //yellow
+	fire_pixels[4] = 0xffffffffu; //white
+	glTexImage1D(GL_TEXTURE_1D, 0, GL_RGBA8, 5, 0, GL_RGBA, GL_UNSIGNED_BYTE, fire_pixels.data());
+
 
 	glPointSize(5.f);
 
@@ -313,7 +345,9 @@ int main() try
 			camera_rotation += 3.f * dt;
 
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		glEnable(GL_DEPTH_TEST);
+		glDisable(GL_DEPTH_TEST);
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 		glEnable(GL_CULL_FACE);
 
 		float near = 0.1f;
@@ -337,7 +371,7 @@ int main() try
 			for (int i = 0; i < cnt_particles; i++)
 			{
 				auto& p = particles[i];
-				p.speed.y += dt * 5.0;
+				p.speed.y += dt * 3.0;
 				
 				p.speed *= std::exp(-1.5 * dt);
 				p.position += p.speed * dt;
@@ -352,7 +386,12 @@ int main() try
 		}
 
 		
-
+		glUniform1i(tex_location, 0);
+		glUniform1i(colors_location, 1);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, tex);
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_1D, colors);
 		glUniformMatrix4fv(model_location, 1, GL_FALSE, reinterpret_cast<float *>(&model));
 		glUniformMatrix4fv(view_location, 1, GL_FALSE, reinterpret_cast<float *>(&view));
 		glUniformMatrix4fv(projection_location, 1, GL_FALSE, reinterpret_cast<float *>(&projection));
